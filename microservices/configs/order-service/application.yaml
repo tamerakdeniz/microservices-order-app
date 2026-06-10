@@ -1,0 +1,31 @@
+spring:
+  datasource:
+    url: ${POSTGRES_URL:jdbc:postgresql://localhost:5432/microservices-spring}
+    driver-class-name: org.postgresql.Driver
+    username: ${POSTGRES_USER:admin}
+    password: ${POSTGRES_PASSWORD:admin}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        format_sql: true
+  cloud:
+    function:
+      definition: consumeTestEvent
+    stream:
+      bindings:
+        consumeTestEvent-in-0:
+          destination: test-topic
+          group: order-service-group
+          content-type: application/json
+        orderCreatedEvent-out-0:
+          destination: order-created-topic
+          content-type: application/json
+      kafka:
+        binder:
+          brokers: localhost:9092
+
+app:
+  outbox:
+    publish-delay-ms: 2000

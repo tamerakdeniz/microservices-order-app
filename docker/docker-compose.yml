@@ -1,0 +1,207 @@
+services:
+  kafka:
+    image: apache/kafka:4.2.0
+    container_name: kafka
+    ports:
+      - "9092:9092"          # host -> broker (EXTERNAL listener)
+    environment:
+      # --- KRaft kimlik ve roller ---
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller        # tek node hem broker hem controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+ 
+      # --- Listener tanımları ---
+      # Üç ayrı listener: container içi (INTERNAL), host (EXTERNAL), controller
+      KAFKA_LISTENERS: INTERNAL://0.0.0.0:19092,EXTERNAL://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:19092,EXTERNAL://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+ 
+      # --- Tek node olduğu için replikasyon faktörleri 1 ---
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+ 
+      # --- Geliştirme kolaylıkları ---
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0      # consumer'lar hızlı bağlansın
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"        # eğitimde pratik; prod'da false yapın
+      KAFKA_NUM_PARTITIONS: 3                         # otomatik topic'ler 3 partition'la doğsun
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+    networks:
+      - kafka-net
+ 
+  kafka-ui:
+    image: kafbat/kafka-ui:latest     # provectuslabs/kafka-ui'nin aktif geliştirilen fork'u
+    container_name: kafka-ui
+    ports:
+      - "8080:8080"                   # http://localhost:8080
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:19092
+      DYNAMIC_CONFIG_ENABLED: "true"
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - kafka-net
+
+  order-db:
+    image: postgres:17
+    container_name: order-db
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: microservices-spring
+    ports:
+      - "5432:5432"
+    volumes:
+      - order-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d microservices-spring"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - kafka-net
+ 
+  product-db:
+    image: postgres:17
+    container_name: product-db
+    command: ["postgres", "-c", "wal_level=logical", "-c", "max_wal_senders=10", "-c", "max_replication_slots=10"]
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: test12345
+      POSTGRES_DB: products
+    ports:
+      - "5433:5432" # sağ taraf daima uygulamanın kendi portu
+    volumes:
+      - product-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d products"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - kafka-net
+
+  user-db:
+    image: postgres:17
+    container_name: user-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: test12345
+      POSTGRES_DB: users
+    ports:
+      - "5434:5432" # sağ taraf daima uygulamanın kendi portu
+    volumes:
+      - user-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d users"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - kafka-net
+
+  product-db-schema:
+    image: postgres:17
+    container_name: product-db-schema
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        PGPASSWORD=test12345 psql -h product-db -U postgres -d products <<'SQL'
+        CREATE TABLE IF NOT EXISTS public.outbox (
+          id UUID PRIMARY KEY,
+          aggregate_type VARCHAR(255),
+          aggregate_id VARCHAR(255),
+          event_type VARCHAR(255),
+          topic VARCHAR(255),
+          payload TEXT,
+          created_at TIMESTAMPTZ
+        );
+        SQL
+        echo "product outbox schema ready"
+    depends_on:
+      product-db:
+        condition: service_healthy
+    networks:
+      - kafka-net
+
+  debezium-connect:
+    image: quay.io/debezium/connect:3.4
+    container_name: debezium-connect
+    ports:
+      - "8083:8083"
+    environment:
+      BOOTSTRAP_SERVERS: kafka:19092
+      GROUP_ID: product-outbox-connect
+      CONFIG_STORAGE_TOPIC: debezium-connect-configs
+      OFFSET_STORAGE_TOPIC: debezium-connect-offsets
+      STATUS_STORAGE_TOPIC: debezium-connect-statuses
+      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: "1"
+      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: "1"
+      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: "1"
+      CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE: "false"
+      CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE: "false"
+    depends_on:
+      kafka:
+        condition: service_healthy
+      product-db:
+        condition: service_healthy
+      product-db-schema:
+        condition: service_completed_successfully
+    networks:
+      - kafka-net
+
+  product-outbox-connector:
+    image: curlimages/curl:8.11.1
+    container_name: product-outbox-connector
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        until curl --silent --fail http://debezium-connect:8083/connectors >/dev/null; do
+          sleep 2
+        done
+        curl --silent --fail --show-error --request PUT \
+          --header 'Content-Type: application/json' \
+          --data @/connectors/product-outbox-connector.json \
+          http://debezium-connect:8083/connectors/product-outbox-connector/config \
+          --output /tmp/product-outbox-connector-response.json
+        echo "product-outbox-connector registered"
+    volumes:
+      - ./debezium/product-outbox-connector.json:/connectors/product-outbox-connector.json:ro
+    depends_on:
+      debezium-connect:
+        condition: service_started
+      product-db-schema:
+        condition: service_completed_successfully
+    networks:
+      - kafka-net
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: pgadmin-gygy5
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    networks:
+      - kafka-net
+
+volumes:
+  kafka-data:
+  order-db-data:
+  product-db-data:
+  user-db-data:
+ 
+networks:
+  kafka-net:
+    driver: bridge

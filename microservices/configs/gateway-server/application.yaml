@@ -1,0 +1,27 @@
+spring:
+  cloud:
+    gateway:
+      server:
+        webmvc:
+          routes:
+            - id: user-service
+              uri: lb://user-service
+              predicates:
+                - Path=/api/users/**
+            - id: product-service
+              uri: lb://product-service
+              predicates:
+                - Path=/api/products/**
+            - id: cart-service
+              uri: lb://cart-service
+              predicates:
+                - Path=/api/carts/**
+            - id: order-service
+              uri: lb://order-service
+              predicates:
+                - Path=/api/orders/**
+
+eureka:
+  client:
+    fetch-registry: true
+    register-with-eureka: true

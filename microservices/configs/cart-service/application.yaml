@@ -1,0 +1,13 @@
+spring:
+  cloud:
+    function:
+      definition: consumeTestEvent
+    stream:
+      bindings:
+        consumeTestEvent-in-0:
+          destination: test-topic
+          group: cart-service-group
+          content-type: application/json
+      kafka:
+        binder:
+          brokers: localhost:9092
