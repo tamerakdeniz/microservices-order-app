@@ -1,0 +1,36 @@
+{
+  "realm": "microservices-gygy5",
+  "enabled": true,
+  "clients": [
+    {
+      "clientId": "postman-client",
+      "name": "Postman Client",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "redirectUris": [
+        "*"
+      ],
+      "webOrigins": [
+        "*"
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "test-user",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Test",
+      "lastName": "User",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "test123",
+          "temporary": false
+        }
+      ]
+    }
+  ]
+}

@@ -1,3 +1,10 @@
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8085/realms/microservices-gygy5}
+
 management:
   endpoints:
     web:

@@ -1,18 +1,4 @@
 spring:
-  security:
-    oauth2:
-      resourceserver:
-        jwt:
-          issuer-uri: http://localhost:8087/realms/microservices-gygy5
-  cloud:
-    stream:
-      bindings:
-        testEvent-out-0:
-          destination: test-topic
-          content-type: application/json
-      kafka:
-        binder:
-          brokers: localhost:9092
   datasource:
     url: jdbc:postgresql://localhost:5433/products
     username: postgres

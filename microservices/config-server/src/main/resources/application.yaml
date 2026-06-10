@@ -10,10 +10,10 @@ spring:
           search-locations:
             - file:./configs
             - file:./configs/{application}
+            - file:../configs
+            - file:../configs/{application}
             - file:microservices/configs
             - file:microservices/configs/{application}
-            - file:../
-            - file:../{application}
 
 server:
   port: 8888
