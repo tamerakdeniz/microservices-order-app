@@ -24,6 +24,7 @@
         <module>order-service</module>
         <module>cart-service</module>
         <module>gateway-server</module>
+        <module>configs/config-server</module>
     </modules>
 
     <properties>

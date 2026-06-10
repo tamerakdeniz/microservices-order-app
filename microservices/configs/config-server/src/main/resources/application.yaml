@@ -1,19 +1,19 @@
 spring:
-    application:
-        name: config-server
-    cloud:
-        config:
-            server:
-                git: 
-                    uri: https://github.com/halitkalayci/Microservices-Spring-GYGY5.git
-                    default-label: master
-                    search-paths: microservices/configs,microservices/configs/{application}
-                    clone-on-start: true
-                    force-pull: true
-                native:
-                    search-locations:
-                        - file:../
-                        - file:../{application}
-                
+  application:
+    name: config-server
+  profiles:
+    active: native
+  cloud:
+    config:
+      server:
+        native:
+          search-locations:
+            - file:./configs
+            - file:./configs/{application}
+            - file:microservices/configs
+            - file:microservices/configs/{application}
+            - file:../
+            - file:../{application}
+
 server:
-    port: 8888
+  port: 8888

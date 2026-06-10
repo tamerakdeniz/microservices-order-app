@@ -51,30 +51,10 @@ services:
         condition: service_healthy
     networks:
       - kafka-net
-
-  order-db:
-    image: postgres:17
-    container_name: order-db
-    environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: admin
-      POSTGRES_DB: microservices-spring
-    ports:
-      - "5432:5432"
-    volumes:
-      - order-db-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin -d microservices-spring"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-    networks:
-      - kafka-net
  
   product-db:
     image: postgres:17
     container_name: product-db
-    command: ["postgres", "-c", "wal_level=logical", "-c", "max_wal_senders=10", "-c", "max_replication_slots=10"]
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: test12345
@@ -83,13 +63,6 @@ services:
       - "5433:5432" # sağ taraf daima uygulamanın kendi portu
     volumes:
       - product-db-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d products"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-    networks:
-      - kafka-net
 
   user-db:
     image: postgres:17
@@ -102,89 +75,6 @@ services:
       - "5434:5432" # sağ taraf daima uygulamanın kendi portu
     volumes:
       - user-db-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d users"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-    networks:
-      - kafka-net
-
-  product-db-schema:
-    image: postgres:17
-    container_name: product-db-schema
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-        PGPASSWORD=test12345 psql -h product-db -U postgres -d products <<'SQL'
-        CREATE TABLE IF NOT EXISTS public.outbox (
-          id UUID PRIMARY KEY,
-          aggregate_type VARCHAR(255),
-          aggregate_id VARCHAR(255),
-          event_type VARCHAR(255),
-          topic VARCHAR(255),
-          payload TEXT,
-          created_at TIMESTAMPTZ
-        );
-        SQL
-        echo "product outbox schema ready"
-    depends_on:
-      product-db:
-        condition: service_healthy
-    networks:
-      - kafka-net
-
-  debezium-connect:
-    image: quay.io/debezium/connect:3.4
-    container_name: debezium-connect
-    ports:
-      - "8083:8083"
-    environment:
-      BOOTSTRAP_SERVERS: kafka:19092
-      GROUP_ID: product-outbox-connect
-      CONFIG_STORAGE_TOPIC: debezium-connect-configs
-      OFFSET_STORAGE_TOPIC: debezium-connect-offsets
-      STATUS_STORAGE_TOPIC: debezium-connect-statuses
-      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: "1"
-      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: "1"
-      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: "1"
-      CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE: "false"
-      CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE: "false"
-    depends_on:
-      kafka:
-        condition: service_healthy
-      product-db:
-        condition: service_healthy
-      product-db-schema:
-        condition: service_completed_successfully
-    networks:
-      - kafka-net
-
-  product-outbox-connector:
-    image: curlimages/curl:8.11.1
-    container_name: product-outbox-connector
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-        until curl --silent --fail http://debezium-connect:8083/connectors >/dev/null; do
-          sleep 2
-        done
-        curl --silent --fail --show-error --request PUT \
-          --header 'Content-Type: application/json' \
-          --data @/connectors/product-outbox-connector.json \
-          http://debezium-connect:8083/connectors/product-outbox-connector/config \
-          --output /tmp/product-outbox-connector-response.json
-        echo "product-outbox-connector registered"
-    volumes:
-      - ./debezium/product-outbox-connector.json:/connectors/product-outbox-connector.json:ro
-    depends_on:
-      debezium-connect:
-        condition: service_started
-      product-db-schema:
-        condition: service_completed_successfully
-    networks:
-      - kafka-net
-
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: pgadmin-gygy5
@@ -193,12 +83,23 @@ services:
       PGADMIN_DEFAULT_PASSWORD: admin
     ports:
       - "5050:80"
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.1
+    container_name: keycloak
+    restart: unless-stopped
+    command: start-dev --import-realm
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HOSTNAME_STRICT: "false"
+      KC_HTTP_ENABLED: "true"
+    ports:
+      - "8087:8080"
     networks:
       - kafka-net
-
 volumes:
   kafka-data:
-  order-db-data:
   product-db-data:
   user-db-data:
  
