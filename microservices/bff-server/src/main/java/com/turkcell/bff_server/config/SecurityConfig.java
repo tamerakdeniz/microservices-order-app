@@ -36,6 +36,7 @@ public class SecurityConfig {
                         .anyRequest().authenticated())
                 .oauth2Login(oauth2 -> oauth2.defaultSuccessUrl("/", false))
                 .logout(logout -> logout
+                        .logoutUrl("/api/auth/logout")
                         .logoutSuccessHandler(oidcLogoutSuccessHandler)
                         .invalidateHttpSession(true)
                         .clearAuthentication(true)
