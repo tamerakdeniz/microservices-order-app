@@ -53,11 +53,18 @@ public class SecurityConfig {
     public LogoutSuccessHandler oidcLogoutSuccessHandler(
             ClientRegistrationRepository clientRegistrationRepository
     ) {
-        OidcClientInitiatedLogoutSuccessHandler logoutSuccessHandler =
+        OidcClientInitiatedLogoutSuccessHandler oidcLogoutSuccessHandler =
                 new OidcClientInitiatedLogoutSuccessHandler(clientRegistrationRepository);
-        logoutSuccessHandler.setPostLogoutRedirectUri("{baseUrl}/");
+        oidcLogoutSuccessHandler.setPostLogoutRedirectUri("{baseUrl}/oauth2/authorization/keycloak");
 
-        return logoutSuccessHandler;
+        return (request, response, authentication) -> {
+            if (authentication == null) {
+                response.sendRedirect(request.getContextPath() + "/oauth2/authorization/keycloak");
+                return;
+            }
+
+            oidcLogoutSuccessHandler.onLogoutSuccess(request, response, authentication);
+        };
     }
 
     static final class SpaCsrfTokenRequestHandler extends CsrfTokenRequestAttributeHandler {
@@ -76,7 +83,10 @@ public class SecurityConfig {
         @Override
         public String resolveCsrfTokenValue(HttpServletRequest request, CsrfToken csrfToken) {
             String headerValue = request.getHeader(csrfToken.getHeaderName());
-            return (StringUtils.hasText(headerValue) ? this.plain : this.xor)
+            String parameterValue = request.getParameter(csrfToken.getParameterName());
+            return (StringUtils.hasText(headerValue) || StringUtils.hasText(parameterValue)
+                    ? this.plain
+                    : this.xor)
                     .resolveCsrfTokenValue(request, csrfToken);
         }
     }

@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
 
 const PRODUCT_ENDPOINT = "/api/v1/products";
+const LOGOUT_ENDPOINT = "/api/auth/logout";
+
+function getCookieValue(name) {
+  return document.cookie
+    .split("; ")
+    .find((cookie) => cookie.startsWith(`${name}=`))
+    ?.split("=")
+    .slice(1)
+    .join("=");
+}
 
 function App() {
   const [result, setResult] = useState("");
@@ -39,6 +49,8 @@ function App() {
     loadProduct();
   }, [loadProduct]);
 
+  const csrfToken = getCookieValue("XSRF-TOKEN");
+
   return (
     <main className="shell">
       <section className="panel" aria-labelledby="products-title">
@@ -57,13 +69,20 @@ function App() {
           <strong>{result || error || "..."}</strong>
         </div>
 
-        <button className="button" type="button" onClick={loadProduct} disabled={status === "loading"}>
-          Refresh
-        </button>
+        <div className="actions">
+          <button className="button" type="button" onClick={loadProduct} disabled={status === "loading"}>
+            Refresh
+          </button>
+          <form className="logoutForm" action={LOGOUT_ENDPOINT} method="post">
+            <input type="hidden" name="_csrf" value={csrfToken ? decodeURIComponent(csrfToken) : ""} />
+            <button className="button button-danger" type="submit" disabled={!csrfToken}>
+              Logout
+            </button>
+          </form>
+        </div>
       </section>
     </main>
   );
 }
 
 export default App;
-
