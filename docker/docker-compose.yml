@@ -92,6 +92,28 @@ services:
     ports:
       - "5050:80"
 
+  redis:
+    image: redis:7.4
+    container_name: redis-gygy5
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - kafka-net
+
+  redis-insight:
+    image: redis/redisinsight:latest
+    container_name: redis-insight-gygy5
+    ports:
+      - "5540:5540"
+    volumes:
+      - redis-insight-data:/data
+    depends_on:
+      - redis
+    networks:
+      - kafka-net
+
   keycloak:
     image: quay.io/keycloak/keycloak:26.1
     container_name: keycloak
@@ -110,6 +132,8 @@ volumes:
   kafka-data:
   product-db-data:
   user-db-data:
+  redis-data:
+  redis-insight-data:
  
 networks:
   kafka-net:
